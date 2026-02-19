@@ -1,7 +1,7 @@
 {
   "domain": "defcon_dashboard",
   "name": "DEFCON Dashboard",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "documentation": "https://github.com/your-org/DEFCON_Dashboard",
   "issue_tracker": "https://github.com/your-org/DEFCON_Dashboard/issues",
   "config_flow": true,
