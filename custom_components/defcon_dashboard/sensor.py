@@ -11,5 +11,5 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up DEFCON Dashboard sensors."""
-    # Sensors will be added here
+    # Sensors will be added in a future version
     return
