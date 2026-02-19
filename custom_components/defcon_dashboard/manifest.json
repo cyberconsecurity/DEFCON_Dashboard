@@ -1,7 +1,7 @@
 {
   "domain": "defcon_dashboard",
   "name": "DEFCON Dashboard",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "config_flow": true,
   "documentation": "https://github.com/cyberconsecurity/DEFCON_Dashboard",
   "issue_tracker": "https://github.com/cyberconsecurity/DEFCON_Dashboard/issues",
