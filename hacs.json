@@ -1,0 +1,6 @@
+{
+  "name": "DEFCON Dashboard",
+  "content_in_root": false,
+  "domains": ["integration"],
+  "homeassistant": "2023.8.0"
+}
