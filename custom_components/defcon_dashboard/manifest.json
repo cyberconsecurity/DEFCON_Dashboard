@@ -1,10 +1,10 @@
 {
   "domain": "defcon_dashboard",
   "name": "DEFCON Dashboard",
-  "version": "0.1.3",
-  "documentation": "https://github.com/your-org/DEFCON_Dashboard",
-  "issue_tracker": "https://github.com/your-org/DEFCON_Dashboard/issues",
+  "version": "0.1.4",
   "config_flow": true,
+  "documentation": "https://github.com/cyberconsecurity/DEFCON_Dashboard",
+  "issue_tracker": "https://github.com/cyberconsecurity/DEFCON_Dashboard/issues",
   "iot_class": "cloud_polling",
-  "codeowners": ["@your-github"]
+  "codeowners": ["@cyberconsecurity"]
 }
