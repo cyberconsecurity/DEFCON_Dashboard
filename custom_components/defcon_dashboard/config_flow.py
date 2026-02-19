@@ -7,10 +7,12 @@ from .const import DOMAIN
 
 
 class DefconDashboardConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Config flow for DEFCON Dashboard."""
+
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        # Enforce single instance
+        """Handle the initial step."""
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
 
@@ -22,4 +24,5 @@ class DefconDashboardConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
+        """Return the options flow."""
         return None
