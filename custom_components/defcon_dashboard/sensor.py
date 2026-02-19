@@ -1,168 +1,99 @@
 from __future__ import annotations
 
+import datetime
+import logging
 import re
-from datetime import datetime, timedelta, timezone
-
-import aiohttp
+import requests
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.const import CONF_NAME
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DOMAIN
+_LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=5)
-
-DEFCON_URL = "https://www.defconlevel.com/raised-levels"
+SCAN_INTERVAL = datetime.timedelta(minutes=5)
 
 COMMANDS = {
-    "CYBERCOM": "https://www.defconlevel.com/cybercom",
-    "SOCOM": "https://www.defconlevel.com/socom",
-    "STRATCOM": "https://www.defconlevel.com/stratcom",
-    "TRANSCOM": "https://www.defconlevel.com/transcom",
-    "BIOCOM": "https://www.defconlevel.com/biocom",
-    "DISASTERCOM": "https://www.defconlevel.com/disastercom",
-    "FINCOM": "https://www.defconlevel.com/fincom",
+    "CYBERCOM": "https://www.defconlevel.com/alerts/cyber-command",
+    "SOCOM": "https://www.defconlevel.com/alerts/special-operations-command",
+    "STRATCOM": "https://www.defconlevel.com/alerts/strategic-command",
+    "TRANSCOM": "https://www.defconlevel.com/alerts/transportation-command",
+    "BIOCOM": "https://www.defconlevel.com/alerts/biological-command",
+    "DISASTERCOM": "https://www.defconlevel.com/alerts/disaster-command",
+    "FINCOM": "https://www.defconlevel.com/alerts/financial-command",
     "SPACECOM": "https://www.defconlevel.com/alerts/space-command",
 }
 
+async def async_setup_entry(hass, entry, async_add_entities):
+    sensors = []
+    coordinator = DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        name="DEFCON Command Coordinator",
+        update_interval=SCAN_INTERVAL,
+        update_method=_async_update_data,
+    )
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    coordinator = DefconCoordinator(hass)
     await coordinator.async_config_entry_first_refresh()
 
-    entities: list[SensorEntity] = [
-        DefconLevelSensor(coordinator),
-    ]
-
     for name, url in COMMANDS.items():
-        entities.append(DefconCommandSensor(coordinator, name, url))
+        sensors.append(DefconCommandSensor(coordinator, name, url))
 
-    async_add_entities(entities)
+    async_add_entities(sensors)
 
 
-# -------------------------------------------------------------------
-# Coordinator
-# -------------------------------------------------------------------
-
-class DefconCoordinator(DataUpdateCoordinator):
-    def __init__(self, hass: HomeAssistant) -> None:
-        self._last_states: dict[str, str] = {}
-
-        super().__init__(
-            hass,
-            logger=__import__("logging").getLogger(__name__),
-            name="DEFCON Dashboard Coordinator",
-            update_interval=SCAN_INTERVAL,
-        )
-
-    async def _async_update_data(self):
+async def _async_update_data():
+    data = {}
+    for name, url in COMMANDS.items():
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(DEFCON_URL, timeout=20) as resp:
-                    if resp.status != 200:
-                        raise UpdateFailed(f"HTTP {resp.status}")
-                    html = await resp.text()
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
 
-            now = datetime.now(timezone.utc)
+            # Find "Level X" (e.g. Level 2)
+            level_match = re.search(r"Level\s+(\d)", resp.text, re.IGNORECASE)
+            level = int(level_match.group(1)) if level_match else None
 
-            # DEFCON level
-            match = re.search(r"DEFCON\s+([1-5])", html)
-            defcon_level = int(match.group(1)) if match else None
+            state = "raised" if level and level <= 3 else "normal"
 
-            data = {
-                "updated": now.isoformat(),
-                "defcon_level": defcon_level,
-                "commands": {},
+            data[name] = {
+                "state": state,
+                "level": level,
+                "url": url,
+                "last_updated": datetime.datetime.utcnow().isoformat(),
             }
 
-            for command, url in COMMANDS.items():
-                # SPACECOM sometimes uses "Space Command"
-                found = (
-                    command in html
-                    or (command == "SPACECOM" and "Space Command" in html)
-                )
-
-                state = "raised" if found else "normal"
-                prev = self._last_states.get(command)
-                changed = prev is not None and prev != state
-
-                flash_until = (
-                    now + timedelta(minutes=10) if changed else None
-                )
-
-                self._last_states[command] = state
-
-                data["commands"][command] = {
-                    "state": state,
-                    "url": url,
-                    "changed": changed,
-                    "flash_until": flash_until.isoformat() if flash_until else None,
-                }
-
-            return data
-
         except Exception as err:
-            raise UpdateFailed(str(err)) from err
+            _LOGGER.error("Error fetching %s: %s", name, err)
+            data[name] = {
+                "state": "unknown",
+                "level": None,
+                "url": url,
+            }
+
+    return data
 
 
-# -------------------------------------------------------------------
-# Sensors
-# -------------------------------------------------------------------
+class DefconCommandSensor(SensorEntity):
+    def __init__(self, coordinator, name, url):
+        self.coordinator = coordinator
+        self._name = name
+        self._url = url
 
-class DefconLevelSensor(CoordinatorEntity, SensorEntity):
-    _attr_name = "DEFCON Threat Level"
-    _attr_unique_id = "defcon_dashboard_defcon_level"
-    _attr_icon = "mdi:alert-decagram"
+        self._attr_name = f"DEFCON {name.upper()}"
+        self._attr_unique_id = f"defcon_{name}"
+        self._attr_icon = "mdi:shield-alert"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get("defcon_level")
+        return self.coordinator.data[self._name]["state"]
 
     @property
     def extra_state_attributes(self):
         return {
-            "updated": self.coordinator.data.get("updated"),
-            "source": "defconlevel.com",
+            "level": self.coordinator.data[self._name]["level"],
+            "url": self._url,
+            "last_updated": self.coordinator.data[self._name].get("last_updated"),
         }
 
-
-class DefconCommandSensor(CoordinatorEntity, SensorEntity):
-    _attr_icon = "mdi:shield-alert"
-
-    def __init__(self, coordinator, name: str, url: str):
-        super().__init__(coordinator)
-        self.command = name
-        self.url = url
-        self._attr_name = f"DEFCON {name}"
-        self._attr_unique_id = f"defcon_dashboard_{name.lower()}"
-
-    @property
-    def native_value(self):
-        return self.coordinator.data["commands"][self.command]["state"]
-
-    @property
-    def extra_state_attributes(self):
-        cmd = self.coordinator.data["commands"][self.command]
-        now = datetime.now(timezone.utc)
-
-        flashing = False
-        if cmd["flash_until"]:
-            flashing = now < datetime.fromisoformat(cmd["flash_until"])
-
-        return {
-            "url": cmd["url"],
-            "changed": cmd["changed"],
-            "flash": flashing,
-            "updated": self.coordinator.data.get("updated"),
-        }
+    async def async_update(self):
+        await self.coordinator.async_request_refresh()
