@@ -13,5 +13,6 @@ Full HACS-compatible Home Assistant integration providing:
 2. Restart Home Assistant
 3. Add integration via UI
 
+
 ## Data Source
 https://www.defconlevel.com
